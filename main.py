@@ -11,11 +11,9 @@ from config import (
     EYE_OPEN_THRESHOLD,
     FACE_MODEL_PATH,
     FACE_MODEL_URL,
-    RELOAD_CONFIRMATION_TIME,
+    RELOAD_CONTACT_RATIO,
     RELOAD_COOLDOWN,
-    RELOAD_MAX_HORIZONTAL_GAP,
-    RELOAD_MAX_VERTICAL_GAP,
-    RELOAD_MIN_VERTICAL_GAP,
+    RELOAD_REARM_RATIO,
     SWAP_HANDEDNESS,
     WINDOW_NAME,
 )
@@ -246,7 +244,7 @@ def draw_interface(
             "Armas: esquerda | "
             "Disparo: direita | "
             "Mira: qualquer olho fechado | "
-            "Reload: duas maos abertas empilhadas"
+            "Reload: bata uma mao na outra"
         ),
         (18, 57),
         cv2.FONT_HERSHEY_SIMPLEX,
@@ -317,19 +315,9 @@ def main() -> None:
     )
 
     reload_controller = ReloadGestureController(
-        confirmation_time=(
-            RELOAD_CONFIRMATION_TIME
-        ),
         cooldown=RELOAD_COOLDOWN,
-        max_horizontal_gap_ratio=(
-            RELOAD_MAX_HORIZONTAL_GAP
-        ),
-        min_vertical_gap_ratio=(
-            RELOAD_MIN_VERTICAL_GAP
-        ),
-        max_vertical_gap_ratio=(
-            RELOAD_MAX_VERTICAL_GAP
-        ),
+        contact_ratio=RELOAD_CONTACT_RATIO,
+        rearm_ratio=RELOAD_REARM_RATIO,
     )
 
     left_hand_controller = (
@@ -471,7 +459,7 @@ def main() -> None:
                 )
 
                 # RELOAD TEM PRIORIDADE.
-                # Quando as duas mãos abertas ficam empilhadas,
+                # No instante em que uma mão bate na outra,
                 # não executa troca de arma nem disparo.
                 reload_action = None
 
@@ -566,7 +554,7 @@ def main() -> None:
                 ):
                     if reload_pose_active:
                         current_message = (
-                            "MANTENHA AS MAOS EMPILHADAS"
+                            "RECARREGANDO"
                         )
                     elif (
                         left_hand_found

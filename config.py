@@ -25,9 +25,14 @@ EYE_OPEN_THRESHOLD = 0.24
 # piscar) solte a mira no meio do olho fechado.
 EYE_MISSING_BLENDSHAPES_TOLERANCE = 6
 
-# Recarga: duas mãos abertas e alinhadas verticalmente.
-RELOAD_CONFIRMATION_TIME = 0.35
-RELOAD_COOLDOWN = 1.25
-RELOAD_MAX_HORIZONTAL_GAP = 1.50
-RELOAD_MIN_VERTICAL_GAP = 0.25
-RELOAD_MAX_VERTICAL_GAP = 3.202
+# Recarga: uma mão bate na outra (gesto de encaixar o carregador).
+# RELOAD_CONTACT_RATIO: distancia (em larguras de palma) considerada
+# "toque". Menor = precisa encostar mais.
+# RELOAD_REARM_RATIO: distancia minima para as maos serem consideradas
+# "afastadas" de novo e destravar o proximo reload.
+# Se não estiver disparando, observe "RELOAD GAP" na tela: é a
+# distância real medida quando as mãos se tocam. Ajuste
+# RELOAD_CONTACT_RATIO para um pouco acima desse valor.
+RELOAD_COOLDOWN = 0.6
+RELOAD_CONTACT_RATIO = 1.10
+RELOAD_REARM_RATIO = 2.002
