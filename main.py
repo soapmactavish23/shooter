@@ -11,8 +11,10 @@ from config import (
     EYE_OPEN_THRESHOLD,
     FACE_MODEL_PATH,
     FACE_MODEL_URL,
+    RELOAD_APPROACH_RATIO,
     RELOAD_CONTACT_RATIO,
     RELOAD_COOLDOWN,
+    RELOAD_OCCLUSION_GRACE,
     RELOAD_REARM_RATIO,
     SWAP_HANDEDNESS,
     WINDOW_NAME,
@@ -317,7 +319,9 @@ def main() -> None:
     reload_controller = ReloadGestureController(
         cooldown=RELOAD_COOLDOWN,
         contact_ratio=RELOAD_CONTACT_RATIO,
+        approach_ratio=RELOAD_APPROACH_RATIO,
         rearm_ratio=RELOAD_REARM_RATIO,
+        occlusion_grace=RELOAD_OCCLUSION_GRACE,
     )
 
     left_hand_controller = (
@@ -474,7 +478,10 @@ def main() -> None:
                         )
                     )
                 else:
-                    reload_controller.reset_tracking()
+                    reload_action = (
+                        reload_controller
+                        .handle_hands_missing()
+                    )
 
                 reload_pose_active = (
                     reload_action is not None
