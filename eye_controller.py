@@ -29,6 +29,7 @@ class EyeController:
         open_threshold: float = 0.28,
         close_confirmation_frames: int = 2,
         open_confirmation_frames: int = 2,
+        missing_blendshapes_tolerance: int = 6,
     ) -> None:
         if open_threshold >= close_threshold:
             raise ValueError(
@@ -39,6 +40,15 @@ class EyeController:
         self.open_threshold = open_threshold
         self.close_confirmation_frames = close_confirmation_frames
         self.open_confirmation_frames = open_confirmation_frames
+
+        # Quantos frames seguidos sem blendshapes toleramos antes de
+        # soltar o botao. Um piscar de olhos costuma derrubar a deteccao
+        # de rosto por 1-2 frames, e sem essa tolerancia a mira soltava
+        # e reengatava a cada piscada, dando a sensacao de "nao segurar".
+        self.missing_blendshapes_tolerance = (
+            missing_blendshapes_tolerance
+        )
+        self.missing_blendshapes_count = 0
 
         self.left_blink_score = 0.0
         self.right_blink_score = 0.0
@@ -118,10 +128,33 @@ class EyeController:
 
         return "MIRA DESATIVADA"
 
+    def handle_missing_blendshapes(self) -> Optional[str]:
+        """
+        Chamado quando o frame atual nao trouxe blendshapes de rosto.
+
+        Tolera algumas falhas seguidas (comuns durante o proprio
+        piscar/fechar do olho) antes de soltar o botao, em vez de
+        resetar o estado a cada frame perdido.
+        """
+        self.missing_blendshapes_count += 1
+
+        if (
+            self.missing_blendshapes_count
+            < self.missing_blendshapes_tolerance
+        ):
+            return None
+
+        self.closed_frame_count = 0
+        self.open_frame_count = 0
+
+        return self.release_aim()
+
     def process(
         self,
         categories: Iterable,
     ) -> Optional[str]:
+        self.missing_blendshapes_count = 0
+
         left_score, right_score = (
             self.extract_blink_scores(
                 categories,

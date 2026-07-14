@@ -8,6 +8,7 @@ from config import (
     CAMERA_INDEX,
     EYE_CLOSE_CONFIRMATION_FRAMES,
     EYE_CLOSE_THRESHOLD,
+    EYE_MISSING_BLENDSHAPES_TOLERANCE,
     EYE_OPEN_CONFIRMATION_FRAMES,
     EYE_OPEN_THRESHOLD,
     FACE_MODEL_PATH,
@@ -318,6 +319,9 @@ def main() -> None:
         open_confirmation_frames=(
             EYE_OPEN_CONFIRMATION_FRAMES
         ),
+        missing_blendshapes_tolerance=(
+            EYE_MISSING_BLENDSHAPES_TOLERANCE
+        ),
     )
 
     reload_controller = ReloadGestureController(
@@ -355,7 +359,8 @@ def main() -> None:
     )
     message_duration = 1.20
 
-    frame_timestamp_ms = 0
+    video_started_at = time.monotonic()
+    last_frame_timestamp_ms = -1
 
     try:
         with hands_module.Hands(
@@ -392,7 +397,12 @@ def main() -> None:
                     rgb_frame,
                 )
 
-                frame_timestamp_ms += 1
+                frame_timestamp_ms = int(
+                    (time.monotonic() - video_started_at) * 1000
+                )
+                if frame_timestamp_ms <= last_frame_timestamp_ms:
+                    frame_timestamp_ms = last_frame_timestamp_ms + 1
+                last_frame_timestamp_ms = frame_timestamp_ms
 
                 mp_image = mp.Image(
                     image_format=mp.ImageFormat.SRGB,
@@ -549,7 +559,14 @@ def main() -> None:
                         current_message = eye_action
                         message_started_at = now
                 else:
-                    eye_controller.reset()
+                    eye_action = (
+                        eye_controller
+                        .handle_missing_blendshapes()
+                    )
+
+                    if eye_action:
+                        current_message = eye_action
+                        message_started_at = now
 
                 if (
                     now - message_started_at
