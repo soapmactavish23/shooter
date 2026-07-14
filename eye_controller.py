@@ -1,168 +1,192 @@
-import time
-from collections import deque
-from typing import Optional, Sequence, Tuple
-
-import numpy as np
+from typing import Iterable, Optional
 
 from input_controller import GameInputController
 
 
 class EyeController:
-    """Calibra os olhos e aciona a mira com um piscar válido."""
+    """
+    Controla a mira pelos blendshapes do Face Landmarker.
 
-    LEFT_EYE_POINTS = (33, 160, 158, 133, 153, 144)
-    RIGHT_EYE_POINTS = (362, 385, 387, 263, 373, 380)
+    eyeBlinkLeft ou eyeBlinkRight acima do limite:
+        mantém o botão direito pressionado.
+
+    Os dois olhos abaixo do limite de abertura:
+        libera o botão direito.
+    """
+
+    LEFT_BLINK_NAMES = {
+        "eyeBlinkLeft",
+        "eye_blink_left",
+    }
+    RIGHT_BLINK_NAMES = {
+        "eyeBlinkRight",
+        "eye_blink_right",
+    }
 
     def __init__(
         self,
-        calibration_frames: int = 45,
-        threshold_factor: float = 0.72,
-        minimum_closed_time: float = 0.06,
-        maximum_closed_time: float = 0.80,
-        blink_cooldown: float = 0.70,
-        aim_hold_mode: bool = False,
+        close_threshold: float = 0.48,
+        open_threshold: float = 0.28,
+        close_confirmation_frames: int = 2,
+        open_confirmation_frames: int = 2,
     ) -> None:
-        self.calibration_frames = calibration_frames
-        self.threshold_factor = threshold_factor
-        self.minimum_closed_time = minimum_closed_time
-        self.maximum_closed_time = maximum_closed_time
-        self.blink_cooldown = blink_cooldown
-        self.aim_hold_mode = aim_hold_mode
+        if open_threshold >= close_threshold:
+            raise ValueError(
+                "open_threshold deve ser menor que close_threshold."
+            )
 
-        self.calibration_values = deque(maxlen=calibration_frames)
-        self.is_calibrated = False
-        self.normal_eye_ratio = 0.0
-        self.closed_threshold = 0.0
-        self.open_threshold = 0.0
-        self.eyes_were_closed = False
-        self.closed_at = 0.0
-        self.last_blink_at = 0.0
-        self.last_left_ratio = 0.0
-        self.last_right_ratio = 0.0
-        self.last_average_ratio = 0.0
+        self.close_threshold = close_threshold
+        self.open_threshold = open_threshold
+        self.close_confirmation_frames = close_confirmation_frames
+        self.open_confirmation_frames = open_confirmation_frames
+
+        self.left_blink_score = 0.0
+        self.right_blink_score = 0.0
+
+        self.closed_frame_count = 0
+        self.open_frame_count = 0
         self.aim_is_active = False
 
     @staticmethod
-    def distance(point_a, point_b) -> float:
-        a = np.array([point_a.x, point_a.y], dtype=float)
-        b = np.array([point_b.x, point_b.y], dtype=float)
-        return float(np.linalg.norm(a - b))
+    def category_name(category) -> str:
+        return str(
+            getattr(
+                category,
+                "category_name",
+                getattr(
+                    category,
+                    "display_name",
+                    "",
+                ),
+            )
+        )
 
-    def calculate_eye_aspect_ratio(
+    @staticmethod
+    def category_score(category) -> float:
+        return float(
+            getattr(
+                category,
+                "score",
+                0.0,
+            )
+        )
+
+    def extract_blink_scores(
         self,
-        landmarks: Sequence,
-        eye_points: Tuple[int, int, int, int, int, int],
-    ) -> float:
-        outer, upper_outer, upper_inner, inner, lower_inner, lower_outer = eye_points
-        vertical_1 = self.distance(landmarks[upper_outer], landmarks[lower_outer])
-        vertical_2 = self.distance(landmarks[upper_inner], landmarks[lower_inner])
-        horizontal = self.distance(landmarks[outer], landmarks[inner])
+        categories: Iterable,
+    ) -> tuple[float, float]:
+        left_score = 0.0
+        right_score = 0.0
 
-        if horizontal == 0:
-            return 0.0
+        for category in categories:
+            name = self.category_name(category)
+            score = self.category_score(category)
 
-        return (vertical_1 + vertical_2) / (2.0 * horizontal)
+            if name in self.LEFT_BLINK_NAMES:
+                left_score = score
+            elif name in self.RIGHT_BLINK_NAMES:
+                right_score = score
 
-    def calculate_eye_ratios(self, landmarks: Sequence) -> Tuple[float, float, float]:
-        left = self.calculate_eye_aspect_ratio(landmarks, self.LEFT_EYE_POINTS)
-        right = self.calculate_eye_aspect_ratio(landmarks, self.RIGHT_EYE_POINTS)
-        average = (left + right) / 2.0
+        self.left_blink_score = left_score
+        self.right_blink_score = right_score
 
-        self.last_left_ratio = left
-        self.last_right_ratio = right
-        self.last_average_ratio = average
+        return left_score, right_score
 
-        return left, right, average
-
-    def calibrate(self, average_ratio: float) -> None:
-        if average_ratio <= 0:
-            return
-
-        self.calibration_values.append(average_ratio)
-        if len(self.calibration_values) < self.calibration_frames:
-            return
-
-        self.normal_eye_ratio = float(np.median(np.array(self.calibration_values)))
-        self.closed_threshold = self.normal_eye_ratio * self.threshold_factor
-        self.open_threshold = self.closed_threshold * 1.12
-        self.is_calibrated = True
-
-    def reset(self) -> None:
-        self.eyes_were_closed = False
-        self.closed_at = 0.0
-
-    def release_buttons(self) -> None:
+    def press_aim(self) -> Optional[str]:
         if self.aim_is_active:
-            GameInputController.right_button_up()
-            self.aim_is_active = False
-
-    def reset_calibration(self) -> None:
-        self.release_buttons()
-        self.reset()
-        self.calibration_values.clear()
-        self.is_calibrated = False
-        self.normal_eye_ratio = 0.0
-        self.closed_threshold = 0.0
-        self.open_threshold = 0.0
-
-    def toggle_aim(self) -> str:
-        if self.aim_hold_mode:
-            if self.aim_is_active:
-                GameInputController.right_button_up()
-                self.aim_is_active = False
-                return "MIRA DESATIVADA"
-
-            GameInputController.right_button_down()
-            self.aim_is_active = True
-            return "MIRA ATIVADA"
-
-        GameInputController.right_click(0.08)
-        return "MIRA"
-
-    def process(self, landmarks: Sequence) -> Optional[str]:
-        now = time.monotonic()
-        left, right, average = self.calculate_eye_ratios(landmarks)
-
-        if not self.is_calibrated:
-            self.calibrate(average)
-            remaining = max(self.calibration_frames - len(self.calibration_values), 0)
-            return f"CALIBRANDO OLHOS: {remaining}"
-
-        both_closed = left < self.closed_threshold and right < self.closed_threshold
-        both_open = left > self.open_threshold and right > self.open_threshold
-
-        if both_closed and not self.eyes_were_closed:
-            self.eyes_were_closed = True
-            self.closed_at = now
             return None
 
-        if both_open and self.eyes_were_closed:
-            closed_duration = now - self.closed_at
-            self.eyes_were_closed = False
+        GameInputController.right_button_down()
+        self.aim_is_active = True
 
-            valid_blink = (
-                self.minimum_closed_time <= closed_duration <= self.maximum_closed_time
-                and now - self.last_blink_at >= self.blink_cooldown
+        print(
+            "Mira ativada | "
+            f"eyeBlinkLeft={self.left_blink_score:.2f} | "
+            f"eyeBlinkRight={self.right_blink_score:.2f}"
+        )
+
+        return "MIRA ATIVADA"
+
+    def release_aim(self) -> Optional[str]:
+        if not self.aim_is_active:
+            return None
+
+        GameInputController.right_button_up()
+        self.aim_is_active = False
+
+        print("Mira desativada")
+
+        return "MIRA DESATIVADA"
+
+    def process(
+        self,
+        categories: Iterable,
+    ) -> Optional[str]:
+        left_score, right_score = (
+            self.extract_blink_scores(
+                categories,
             )
+        )
 
-            if valid_blink:
-                self.last_blink_at = now
-                action = self.toggle_aim()
-                print(action)
-                return action
+        any_eye_closed = (
+            left_score >= self.close_threshold
+            or right_score >= self.close_threshold
+        )
 
-        if self.eyes_were_closed and now - self.closed_at > self.maximum_closed_time:
-            self.reset()
+        both_eyes_open = (
+            left_score <= self.open_threshold
+            and right_score <= self.open_threshold
+        )
 
+        if any_eye_closed:
+            self.closed_frame_count += 1
+            self.open_frame_count = 0
+
+            if (
+                self.closed_frame_count
+                >= self.close_confirmation_frames
+            ):
+                return self.press_aim()
+
+            return None
+
+        if both_eyes_open:
+            self.open_frame_count += 1
+            self.closed_frame_count = 0
+
+            if (
+                self.open_frame_count
+                >= self.open_confirmation_frames
+            ):
+                return self.release_aim()
+
+            return None
+
+        # Histerese: mantém o estado atual quando os valores ficam
+        # entre o limite de abertura e o limite de fechamento.
+        self.closed_frame_count = 0
+        self.open_frame_count = 0
         return None
 
-    def get_debug_text(self) -> str:
-        if not self.is_calibrated:
-            return f"Calibracao: {len(self.calibration_values)}/{self.calibration_frames}"
+    def reset(self) -> None:
+        self.closed_frame_count = 0
+        self.open_frame_count = 0
+        self.left_blink_score = 0.0
+        self.right_blink_score = 0.0
+        self.release_aim()
 
-        aim = "ON" if self.aim_is_active else "OFF"
+    def release_buttons(self) -> None:
+        self.release_aim()
+
+    def get_debug_text(self) -> str:
+        aim_state = (
+            "ON"
+            if self.aim_is_active
+            else "OFF"
+        )
+
         return (
-            f"L:{self.last_left_ratio:.3f} R:{self.last_right_ratio:.3f} "
-            f"AVG:{self.last_average_ratio:.3f} LIM:{self.closed_threshold:.3f} "
-            f"MIRA:{aim}"
+            f"BLINK E:{self.left_blink_score:.2f} "
+            f"D:{self.right_blink_score:.2f} | "
+            f"MIRA:{aim_state}"
         )
