@@ -7,8 +7,9 @@ class EyeController:
     """
     Controla a mira pelos blendshapes do Face Landmarker.
 
-    eyeBlinkLeft ou eyeBlinkRight acima do limite:
-        mantém o botão direito pressionado.
+    eyeBlinkLeft ou eyeBlinkRight acima do limite de fechamento:
+        pressiona e mantém o botão direito, imprimindo "MIRA" a cada
+        frame enquanto qualquer um dos olhos continuar fechado.
 
     Os dois olhos abaixo do limite de abertura:
         libera o botão direito.
@@ -27,8 +28,6 @@ class EyeController:
         self,
         close_threshold: float = 0.48,
         open_threshold: float = 0.28,
-        close_confirmation_frames: int = 2,
-        open_confirmation_frames: int = 2,
         missing_blendshapes_tolerance: int = 6,
     ) -> None:
         if open_threshold >= close_threshold:
@@ -38,13 +37,11 @@ class EyeController:
 
         self.close_threshold = close_threshold
         self.open_threshold = open_threshold
-        self.close_confirmation_frames = close_confirmation_frames
-        self.open_confirmation_frames = open_confirmation_frames
 
         # Quantos frames seguidos sem blendshapes toleramos antes de
         # soltar o botao. Um piscar de olhos costuma derrubar a deteccao
         # de rosto por 1-2 frames, e sem essa tolerancia a mira soltava
-        # e reengatava a cada piscada, dando a sensacao de "nao segurar".
+        # e reengatava a cada piscada.
         self.missing_blendshapes_tolerance = (
             missing_blendshapes_tolerance
         )
@@ -53,8 +50,6 @@ class EyeController:
         self.left_blink_score = 0.0
         self.right_blink_score = 0.0
 
-        self.closed_frame_count = 0
-        self.open_frame_count = 0
         self.aim_is_active = False
 
     @staticmethod
@@ -144,9 +139,6 @@ class EyeController:
         ):
             return None
 
-        self.closed_frame_count = 0
-        self.open_frame_count = 0
-
         return self.release_aim()
 
     def process(
@@ -161,49 +153,34 @@ class EyeController:
             )
         )
 
-        any_eye_closed = (
+        eye_closed = (
             left_score >= self.close_threshold
             or right_score >= self.close_threshold
         )
 
-        both_eyes_open = (
+        if eye_closed:
+            # Imprime a cada frame enquanto qualquer olho estiver
+            # fechado, independentemente de a mira ja estar ativa.
+            print(
+                "MIRA | olho fechado | "
+                f"E:{left_score:.2f} D:{right_score:.2f}"
+            )
+            return self.press_aim()
+
+        eyes_open = (
             left_score <= self.open_threshold
             and right_score <= self.open_threshold
         )
 
-        if any_eye_closed:
-            self.closed_frame_count += 1
-            self.open_frame_count = 0
+        if eyes_open:
+            return self.release_aim()
 
-            if (
-                self.closed_frame_count
-                >= self.close_confirmation_frames
-            ):
-                return self.press_aim()
-
-            return None
-
-        if both_eyes_open:
-            self.open_frame_count += 1
-            self.closed_frame_count = 0
-
-            if (
-                self.open_frame_count
-                >= self.open_confirmation_frames
-            ):
-                return self.release_aim()
-
-            return None
-
-        # Histerese: mantém o estado atual quando os valores ficam
-        # entre o limite de abertura e o limite de fechamento.
-        self.closed_frame_count = 0
-        self.open_frame_count = 0
+        # Histerese: entre os dois limites, mantém o estado atual
+        # sem imprimir nem alterar o botão.
         return None
 
     def reset(self) -> None:
-        self.closed_frame_count = 0
-        self.open_frame_count = 0
+        self.missing_blendshapes_count = 0
         self.left_blink_score = 0.0
         self.right_blink_score = 0.0
         self.release_aim()

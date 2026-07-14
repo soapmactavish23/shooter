@@ -6,10 +6,8 @@ import mediapipe as mp
 
 from config import (
     CAMERA_INDEX,
-    EYE_CLOSE_CONFIRMATION_FRAMES,
     EYE_CLOSE_THRESHOLD,
     EYE_MISSING_BLENDSHAPES_TOLERANCE,
-    EYE_OPEN_CONFIRMATION_FRAMES,
     EYE_OPEN_THRESHOLD,
     FACE_MODEL_PATH,
     FACE_MODEL_URL,
@@ -313,12 +311,6 @@ def main() -> None:
     eye_controller = EyeController(
         close_threshold=EYE_CLOSE_THRESHOLD,
         open_threshold=EYE_OPEN_THRESHOLD,
-        close_confirmation_frames=(
-            EYE_CLOSE_CONFIRMATION_FRAMES
-        ),
-        open_confirmation_frames=(
-            EYE_OPEN_CONFIRMATION_FRAMES
-        ),
         missing_blendshapes_tolerance=(
             EYE_MISSING_BLENDSHAPES_TOLERANCE
         ),

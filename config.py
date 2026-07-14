@@ -13,11 +13,13 @@ FACE_MODEL_URL = (
     "face_landmarker.task"
 )
 
-# Mira: limite maior para evitar ativação ao apenas apertar os olhos.
-EYE_CLOSE_THRESHOLD = 0.62
+# Mira: reage a qualquer olho fechado (piscada/wink), sem exigir
+# frames seguidos de confirmação. Se a mira não estiver ativando,
+# observe os valores "BLINK E/D" na tela: eles mostram o quanto o
+# Face Landmarker está lendo cada olho fechado, e este limite deve
+# ficar um pouco abaixo do valor que você observar com o olho fechado.
+EYE_CLOSE_THRESHOLD = 0.40
 EYE_OPEN_THRESHOLD = 0.24
-EYE_CLOSE_CONFIRMATION_FRAMES = 3
-EYE_OPEN_CONFIRMATION_FRAMES = 3
 # Frames seguidos sem blendshapes tolerados antes de soltar o botao.
 # Evita que uma falha momentanea de tracking (comum durante o proprio
 # piscar) solte a mira no meio do olho fechado.
@@ -28,4 +30,4 @@ RELOAD_CONFIRMATION_TIME = 0.35
 RELOAD_COOLDOWN = 1.25
 RELOAD_MAX_HORIZONTAL_GAP = 1.50
 RELOAD_MIN_VERTICAL_GAP = 0.25
-RELOAD_MAX_VERTICAL_GAP = 3.20
+RELOAD_MAX_VERTICAL_GAP = 3.202
